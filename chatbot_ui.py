@@ -7,16 +7,18 @@ st.set_page_config(page_title="Gemini Chatbot UI", layout="centered")
 st.title("My AI Chatbot powered by Google Gemini")
 
 # 2. Initialize Gemini Client
-# Streamlit secrets are automatically loaded into st.secrets and environment variables.
-# We prioritize st.secrets which holds the GEMINI_API_KEY
+# CRITICAL CHANGE: We now retrieve the key directly as an OS environment variable, 
+# which is the most reliable way to access secrets in Streamlit Cloud.
 try:
-    # Ensure the key is available
-    if "GEMINI_API_KEY" not in st.secrets:
-        st.error("GEMINI_API_KEY secret not found. Please add it to your Streamlit secrets.")
+    # 1. Get the API key value from the environment variable (set by Streamlit secrets)
+    API_KEY = os.getenv("GEMINI_API_KEY")
+
+    if not API_KEY:
+        st.error("GEMINI_API_KEY environment variable not found. Please ensure it is correctly set in Streamlit secrets.")
         st.stop()
     
-    # Initialize the client using the API key from secrets
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+    # 2. Initialize the client using the API key
+    client = genai.Client(api_key=API_KEY)
     
 except Exception as e:
     st.error(f"Error initializing Gemini Client: {e}")
@@ -35,7 +37,8 @@ if "chat_session" not in st.session_state:
         # Create a new chat session with the specified model
         st.session_state.chat_session = client.chats.create(model=MODEL_NAME)
     except Exception as e:
-        st.error(f"Failed to create chat session: {e}")
+        # This is where the InvalidArgument error occurs if the key is bad
+        st.error(f"Failed to create chat session. Please verify your API Key and Cloud permissions. Error: {e}")
         st.stop()
 
 # 4. Function to send message and update history
@@ -55,24 +58,19 @@ def send_message(prompt):
         st.error(f"An error occurred while communicating with the API: {e}")
 
 # 5. Display Chat History
-# Display all messages stored in the session state
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
         st.markdown(message["text"])
 
-# 6. Chat Input Handling - FIXED SYNTAX HERE
-# Accept user input
+# 6. Chat Input Handling
 prompt = st.chat_input("Ask me anything...")
 
 if prompt:
-    # Immediately display the user's message
     with st.chat_message("user"):
         st.markdown(prompt)
     
-    # Send the message and update history 
     send_message(prompt)
     
-    # Rerun the app to display the new model response
     st.rerun()
 
 # 7. Sidebar for App Info
