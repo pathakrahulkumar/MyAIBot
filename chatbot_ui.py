@@ -1,63 +1,68 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 import os
 
-# Streamlit settings
+# 1. Streamlit App Config
 st.set_page_config(page_title="Gemini Chatbot UI", layout="centered")
 st.title("My AI Chatbot powered by Google Gemini")
 
-# Load API key from Streamlit secrets
+# 2. Load API Key
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not API_KEY:
-    st.error("GEMINI_API_KEY not found. Please add it in Streamlit Secrets.")
+    st.error("GEMINI_API_KEY environment variable not found. Add it in Streamlit Secrets.")
     st.stop()
 
-# Configure Gemini
-genai.configure(api_key=API_KEY)
+# 3. Initialize Gemini Client
+try:
+    client = genai.Client(api_key=API_KEY)
+except Exception as e:
+    st.error(f"Gemini initialization failed: {e}")
+    st.stop()
 
 MODEL_NAME = "gemini-2.5-flash"
 
-# Set up chat history
+# 4. Initialize History
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Create model chat session
-if "chat_session" not in st.session_state:
-    st.session_state.chat_session = genai.Chat(model=MODEL_NAME)
-
-# Function to send message
+# 5. Function to call Gemini Model
 def send_message(prompt):
     try:
-        response = st.session_state.chat_session.send_message(prompt)
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[
+                {"role": "user", "parts": [{"text": prompt}]}
+            ]
+        )
 
+        reply = response.text
+
+        # Store history
         st.session_state.chat_history.append({"role": "user", "text": prompt})
-        st.session_state.chat_history.append({"role": "model", "text": response.text})
+        st.session_state.chat_history.append({"role": "assistant", "text": reply})
 
     except Exception as e:
-        st.error(f"API error: {e}")
+        st.error(f"Gemini API Error: {e}")
 
-# Display chat history
-for message in st.session_state.chat_history:
-    with st.chat_message(message["role"]):
-        st.markdown(message["text"])
+# 6. Display Chat History
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["text"])
 
-# Chat input
+# 7. Chat Input
 prompt = st.chat_input("Ask me anything...")
 
 if prompt:
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    
     send_message(prompt)
-
     st.rerun()
 
-# Sidebar
-st.sidebar.markdown("## App Details")
+# 8. Sidebar Info
+st.sidebar.markdown("## App Info")
 st.sidebar.markdown(f"**Model:** `{MODEL_NAME}`")
+st.sidebar.markdown("This chatbot uses Google's Gemini 2.5 Flash model.")
 st.sidebar.markdown("---")
-if st.sidebar.button("Clear Chat History"):
+
+if st.sidebar.button("Clear Chat"):
     st.session_state.chat_history = []
-    st.session_state.chat_session = genai.Chat(model=MODEL_NAME)
     st.rerun()
