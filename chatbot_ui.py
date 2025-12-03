@@ -1,68 +1,112 @@
 import streamlit as st
 from google import genai
 import os
+import time
 
-# 1. Streamlit App Config
-st.set_page_config(page_title="Gemini Chatbot UI", layout="centered")
-st.title("My AI Chatbot powered by Google Gemini")
+# ---------------------------------------------------
+# 1. Streamlit Page Settings
+# ---------------------------------------------------
+st.set_page_config(page_title="Gemini AI Chatbot", layout="centered")
+st.title("🤖 My AI Chatbot — Powered by Google Gemini 2.5 Flash")
 
-# 2. Load API Key
+# ---------------------------------------------------
+# 2. API Key
+# ---------------------------------------------------
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not API_KEY:
-    st.error("GEMINI_API_KEY environment variable not found. Add it in Streamlit Secrets.")
+    st.error("❌ GEMINI_API_KEY not found. Add it in Streamlit secrets.")
     st.stop()
 
-# 3. Initialize Gemini Client
-try:
-    client = genai.Client(api_key=API_KEY)
-except Exception as e:
-    st.error(f"Gemini initialization failed: {e}")
-    st.stop()
+# Initialize Gemini client
+client = genai.Client(api_key=API_KEY)
 
 MODEL_NAME = "gemini-2.5-flash"
 
-# 4. Initialize History
+# ---------------------------------------------------
+# 3. Chat History
+# ---------------------------------------------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# 5. Function to call Gemini Model
-def send_message(prompt):
+
+# ---------------------------------------------------
+# 4. Send message to Gemini Model
+# ---------------------------------------------------
+def send_message(prompt, image_data=None):
     try:
+        contents = [{"role": "user", "parts": [{"text": prompt}]}]
+
+        # If an image is included
+        if image_data:
+            contents[0]["parts"].append({"inline_data": {"data": image_data, "mime_type": "image/png"}})
+
         response = client.models.generate_content(
             model=MODEL_NAME,
-            contents=[
-                {"role": "user", "parts": [{"text": prompt}]}
-            ]
+            contents=contents
         )
 
         reply = response.text
 
-        # Store history
         st.session_state.chat_history.append({"role": "user", "text": prompt})
         st.session_state.chat_history.append({"role": "assistant", "text": reply})
 
     except Exception as e:
         st.error(f"Gemini API Error: {e}")
 
-# 6. Display Chat History
-for msg in st.session_state.chat_history:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["text"])
 
-# 7. Chat Input
+# ---------------------------------------------------
+# 5. Display Chat History (with UI bubble effect)
+# ---------------------------------------------------
+def show_typing(text):
+    """Typing animation for model messages."""
+    placeholder = st.empty()
+    displayed = ""
+    for char in text:
+        displayed += char
+        placeholder.markdown(displayed)
+        time.sleep(0.01)
+
+
+for msg in st.session_state.chat_history:
+    if msg["role"] == "user":
+        with st.chat_message("user"):
+            st.markdown(f"**You:** {msg['text']}")
+    else:
+        with st.chat_message("assistant"):
+            st.markdown(msg["text"])
+
+
+# ---------------------------------------------------
+# 6. User Input + Image Upload
+# ---------------------------------------------------
+uploaded_img = st.file_uploader("Upload an image (optional)", type=["png", "jpg", "jpeg"])
 prompt = st.chat_input("Ask me anything...")
 
 if prompt:
-    send_message(prompt)
+    img_data = uploaded_img.read() if uploaded_img else None
+
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    send_message(prompt, image_data=img_data)
+
+    # Show typing animation for last assistant response
+    last_msg = st.session_state.chat_history[-1]["text"]
+    with st.chat_message("assistant"):
+        show_typing(last_msg)
+
     st.rerun()
 
-# 8. Sidebar Info
-st.sidebar.markdown("## App Info")
+
+# ---------------------------------------------------
+# 7. Sidebar
+# ---------------------------------------------------
+st.sidebar.header("⚙️ App Settings")
 st.sidebar.markdown(f"**Model:** `{MODEL_NAME}`")
-st.sidebar.markdown("This chatbot uses Google's Gemini 2.5 Flash model.")
+st.sidebar.markdown("Gemini 2.5 Flash is optimized for speed + reasoning.")
 st.sidebar.markdown("---")
 
-if st.sidebar.button("Clear Chat"):
+if st.sidebar.button("🗑 Clear Chat"):
     st.session_state.chat_history = []
     st.rerun()
